@@ -1,0 +1,26 @@
+{
+  "name": "swge",
+  "version": "1.0.0",
+  "description": "simple web game engine",
+  "main": "./engine/server.js",
+  "type": "module",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kolecreates/swge.git"
+  },
+  "author": "kole nunley",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/kolecreates/swge/issues"
+  },
+  "homepage": "https://github.com/kolecreates/swge#readme",
+  "dependencies": {
+    "ws": "^8.15.1"
+  }
+}
