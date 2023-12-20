@@ -24,9 +24,16 @@
 
 /**
  * @typedef SBG_State
+ * @property {string} game_mode
+ * @property {string} level
+ * @property {boolean} in_lobby
+ * @property {number} acceleration_factor
+ * @property {number} match_time_ms
+ * @property {number} max_match_time_ms
+ * @property {number} max_match_count
+ * @property {number[]} team_match_wins
  * @property {SWGE_Camera} camera
  * @property {SWGE_Entity[]} entities
- * @property {string} game_mode
  * @property {SWGE_Entity[]} spawns
  * @property {SBG_Player[]} players
  * @property {number} max_players
@@ -34,10 +41,11 @@
  * @property {number} max_players_per_team
  */
 
-/**
- * @description updates the game state. called for every game loop tick.
- * @param {SWGE_Context} context
- * @param {SBG_State} state
- * @returns {SBG_State} new state
- */
-export default function update(context, state) {}
+export default function update({ context, state }) {
+  return {
+    ...(state || {}),
+    in_lobby: true,
+    game_started: state?.game_started || context.events.find((e) => e.type === "start_game"),
+    match_time_ms: context.ms_since_start,
+  };
+}

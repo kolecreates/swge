@@ -4,18 +4,40 @@
     <meta charset="UTF-8" />
     <title>SWGE</title>
   </head>
-  <body>
-    <canvas
-      id="canvas"
-      width="800"
-      height="600"
-      style="border-width: 2px; border-style: solid; border-color: black"
-    ></canvas>
 
-    <script src="./core.js"></script>
-    <script src="./draw.js"></script>
-    <script src="./client.js"></script>
-    <script src="./update.js"></script>
-    <script src="./render.js"></script>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #fff;
+    }
+
+    #swge_ui {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 800px;
+      height: 600px;
+      z-index: 1;
+    }
+
+    #swge_canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 800px;
+      height: 600px;
+      z-index: 0;
+      border-width: 2px;
+      border-style: solid;
+      border-color: black;
+    }
+  </style>
+  <body>
+    <div id="swge_container">
+      <div id="swge_ui"></div>
+      <canvas id="swge_canvas"></canvas>
+    </div>
+    <script type="module" src="client.js"></script>
   </body>
 </html>

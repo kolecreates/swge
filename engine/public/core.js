@@ -1,8 +1,10 @@
 /**
  * @typedef SWGE_Context
- * @property {number} delta_time_ms the time in milliseconds since the last tick
- * @property {number} time_ms the time in milliseconds since the game started
+ * @property {number} ticks_per_second
+ * @property {number} ms_since_last_tick the time in milliseconds since the last tick
+ * @property {number} ms_since_start the time in milliseconds since the game started
  * @property {number} tick the current tick
+ * @property {any[]} events
  */
 
 /**

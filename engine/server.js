@@ -5,8 +5,20 @@ import * as WebSocket from "ws";
 
 const __dirname = new URL(".", import.meta.url).pathname;
 
+const game = process.argv[2];
+
+if (!game) {
+  console.error("No game specified");
+  process.exit(1);
+}
+
 const server = http.createServer((req, res) => {
-  let filePath = path.join(__dirname, "public", req.url === "/" ? "index.html" : req.url);
+  let isInGameFolder = req.url.startsWith("/game/");
+  let gameFolderPath = path.join(__dirname, "../games", game);
+  let filePath = isInGameFolder
+    ? path.join(gameFolderPath, req.url.replace("/game/", ""))
+    : path.join(__dirname, "public", req.url === "/" ? "index.html" : req.url);
+
   let contentType = "text/html";
   const extname = path.extname(filePath);
 
