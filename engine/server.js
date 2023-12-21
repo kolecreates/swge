@@ -1,6 +1,7 @@
 import http from "http";
 import fs from "fs";
 import path from "path";
+import { Worker } from "worker_threads";
 import * as WebSocket from "ws";
 
 const __dirname = new URL(".", import.meta.url).pathname;
@@ -13,25 +14,25 @@ if (!game) {
 }
 
 const server = http.createServer((req, res) => {
-  let isInGameFolder = req.url.startsWith("/game/");
-  let gameFolderPath = path.join(__dirname, "../games", game);
-  let filePath = isInGameFolder
-    ? path.join(gameFolderPath, req.url.replace("/game/", ""))
+  let is_in_game_folder = req.url.startsWith("/game/");
+  let game_folder_path = path.join(__dirname, "../games", game);
+  let file_path = is_in_game_folder
+    ? path.join(game_folder_path, req.url.replace("/game/", ""))
     : path.join(__dirname, "public", req.url === "/" ? "index.html" : req.url);
 
-  let contentType = "text/html";
-  const extname = path.extname(filePath);
+  let content_type = "text/html";
+  const extname = path.extname(file_path);
 
   switch (extname) {
     case ".js":
-      contentType = "text/javascript";
+      content_type = "text/javascript";
       break;
     case ".css":
-      contentType = "text/css";
+      content_type = "text/css";
       break;
   }
 
-  fs.readFile(filePath, (error, content) => {
+  fs.readFile(file_path, (error, content) => {
     if (error) {
       if (error.code === "ENOENT") {
         fs.readFile(path.join(__dirname, "public", "404.html"), (error, content) => {
@@ -44,30 +45,73 @@ const server = http.createServer((req, res) => {
         res.end("Server error");
       }
     } else {
-      res.writeHead(200, { "Content-Type": contentType });
+      res.writeHead(200, { "Content-Type": content_type });
       res.end(content, "utf-8");
     }
   });
 });
 
-const wss = new WebSocket.WebSocketServer({ server });
+const wss = new WebSocket.WebSocketServer({ server, path: "/ws" });
 
-wss.on("connection", (ws) => {
-  ws.id = Date.now(); // Assign a unique identifier to the WebSocket connection
-  console.log(`Client connected: ${ws.id}`);
+const worker = new Worker(path.join(__dirname, "./server_worker.js"), {
+  env: {
+    GAME_UPDATE_FILE_PATH: path.join(__dirname, "../games", game, "update.js"),
+  },
+});
+
+const gen_uuid = () => `${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
+
+const local_loops = new Set();
+
+const emit_loop_event = (loop_id, event) => {
+  if (local_loops.has(loop_id)) {
+    worker.postMessage({ ...event, loop_id });
+  } else {
+    //@TODO publish to redis
+  }
+};
+
+worker.on("message", (message) => {
+  const serialized = JSON.stringify(message);
+  wss.clients.forEach((client) => {
+    if (client.loop_id === message.loop_id) {
+      client.send(serialized);
+    }
+  });
+  //@TODO publish to redis
+});
+
+wss.on("connection", (ws, req) => {
+  const url_of_page = new URL(req.headers.referer);
+  const join_loop_id = url_of_page.searchParams.get("loop_id");
+  const loop_id = join_loop_id || gen_uuid();
+  ws.id = gen_uuid();
+  ws.loop_id = loop_id;
+
+  if (join_loop_id) {
+    emit_loop_event(loop_id, { type: "join", player_id: ws.id });
+  } else {
+    local_loops.add(loop_id);
+    emit_loop_event({ type: "start", loop_id, player_id: ws.id });
+  }
+
   ws.on("message", (data) => {
-    const message = JSON.parse(data.toString()); // Convert buffer to string, then parse JSON
-    console.log("Received: %s", message);
-    wss.clients.forEach((client) => {
-      const isSelf = client === ws;
-      if (client.readyState === WebSocket.OPEN) {
-        client.send(JSON.stringify({}));
-      }
-    });
+    const message = JSON.parse(data.toString());
+    emit_loop_event(loop_id, { ...message, type: message.type, player_id: ws.id });
   });
 
   ws.on("close", () => {
-    console.log(`Client disconnected: ${ws.id}`);
+    emit_loop_event(loop_id, { type: "leave", player_id: ws.id });
+    unsubscribe_from_relayed_loop_events();
+  });
+});
+
+["SIGINT", "SIGTERM"].forEach((signal) => {
+  process.on(signal, () => {
+    worker.terminate();
+    wss.close();
+    server.close();
+    process.exit();
   });
 });
 
