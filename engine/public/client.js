@@ -1,42 +1,52 @@
+import { get_adjusted_canvas_scale, get_adjusted_canvas_size } from "./draw.js";
 import renderer from "./game/renderer.js";
 
 window.addEventListener("load", async () => {
-  const worker = new Worker("./client_worker.js", {
+  const update_worker = new Worker("./client_update_worker.js", {
     type: "module",
   });
+  const ws = new WebSocket(`ws://${window.location.host}/ws${window.location.search}`);
 
-  const ws = new WebSocket(`ws://${window.location.host}/ws`);
-
-  worker.postMessage({ events: [{ type: "ws_connecting" }] });
+  update_worker.postMessage({ type: "ws_connecting" });
 
   ws.onopen = () => {
-    worker.postMessage({ events: [{ type: "ws_open" }] });
+    update_worker.postMessage({ type: "ws_open" });
   };
 
   ws.onerror = (e) => {
-    worker.postMessage({ events: [{ type: "ws_error", error: e }] });
+    update_worker.postMessage({ type: "ws_error", error: e });
   };
 
   ws.onclose = () => {
-    worker.postMessage({ events: [{ type: "ws_close" }] });
+    update_worker.postMessage({ type: "ws_close" });
   };
 
   ws.onmessage = (e) => {
     const event = JSON.parse(e.data);
-    worker.postMessage({ events: [event] });
+    update_worker.postMessage(event);
   };
 
   const ui = document.getElementById("swge_ui");
+  const canvas = document.getElementById("swge_canvas");
+  const [adjusted_canvas_width, adjusted_canvas_height] = get_adjusted_canvas_size(canvas);
+  canvas.width = adjusted_canvas_width;
+  canvas.height = adjusted_canvas_height;
+  const adjusted_scale = get_adjusted_canvas_scale(canvas);
+  const offscreen_canvas = canvas.transferControlToOffscreen();
+  const draw_worker = new Worker("./client_draw_worker.js", {
+    type: "module",
+  });
+  draw_worker.postMessage({ type: "canvas", canvas: offscreen_canvas, adjusted_scale }, [offscreen_canvas]);
+
   const emit = (event) => {
-    worker.postMessage({ events: [event] });
     ws.send(JSON.stringify(event));
+    update_worker.postMessage(event);
+    draw_worker.postMessage(event);
   };
   const render = renderer({ ui, emit });
 
-  worker.onmessage = (e) => {
-    render({
-      state: e.data.state,
-      prev_state: e.data.prev_state,
-    });
+  update_worker.onmessage = (e) => {
+    draw_worker.postMessage(e.data);
+    render(e.data);
   };
 });

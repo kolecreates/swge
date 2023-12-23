@@ -18,7 +18,7 @@ const server = http.createServer((req, res) => {
   let game_folder_path = path.join(__dirname, "../games", game);
   let file_path = is_in_game_folder
     ? path.join(game_folder_path, req.url.replace("/game/", ""))
-    : path.join(__dirname, "public", req.url === "/" ? "index.html" : req.url);
+    : path.join(__dirname, "public", req.url === "/" || req.url.startsWith("/?") ? "index.html" : req.url);
 
   let content_type = "text/html";
   const extname = path.extname(file_path);
@@ -72,6 +72,9 @@ const emit_loop_event = (loop_id, event) => {
 };
 
 worker.on("message", (message) => {
+  if (message.type.startsWith("server_worker")) {
+    return;
+  }
   const serialized = JSON.stringify(message);
   wss.clients.forEach((client) => {
     if (client.loop_id === message.loop_id) {
@@ -82,17 +85,20 @@ worker.on("message", (message) => {
 });
 
 wss.on("connection", (ws, req) => {
-  const url_of_page = new URL(req.headers.referer);
+  const url_of_page = new URL(req.url, `${req.headers.origin}`);
   const join_loop_id = url_of_page.searchParams.get("loop_id");
   const loop_id = join_loop_id || gen_uuid();
   ws.id = gen_uuid();
   ws.loop_id = loop_id;
 
+  ws.send(JSON.stringify({ type: "server_connect", player_id: ws.id }));
+
   if (join_loop_id) {
     emit_loop_event(loop_id, { type: "join", player_id: ws.id });
   } else {
     local_loops.add(loop_id);
-    emit_loop_event({ type: "start", loop_id, player_id: ws.id });
+    emit_loop_event(loop_id, { type: "start" });
+    emit_loop_event(loop_id, { type: "join", player_id: ws.id, is_host: true });
   }
 
   ws.on("message", (data) => {
@@ -101,8 +107,7 @@ wss.on("connection", (ws, req) => {
   });
 
   ws.on("close", () => {
-    emit_loop_event(loop_id, { type: "leave", player_id: ws.id });
-    unsubscribe_from_relayed_loop_events();
+    emit_loop_event(loop_id, { type: "leave", player_id: ws.id, is_host: local_loops.has(loop_id) });
   });
 });
 
@@ -111,6 +116,7 @@ wss.on("connection", (ws, req) => {
     worker.terminate();
     wss.close();
     server.close();
+    console.log("Server stopped");
     process.exit();
   });
 });

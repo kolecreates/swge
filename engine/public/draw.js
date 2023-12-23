@@ -81,7 +81,7 @@ function swge_transform_entity_to_canvas(ctx, camera, entity) {
  * @param {SWGE_Entity[]} entities
  * @returns {void}
  * */
-function swge_draw_entities(ctx, camera, entities) {
+export function swge_draw_entities(ctx, camera, entities) {
   const sorted = entities.sort((a, b) => a.z - b.z);
 
   const scale = Math.max(0, 1 / (camera.z === 0 ? 1 : Math.abs(camera.z)));
@@ -111,4 +111,78 @@ function swge_draw_entities(ctx, camera, entities) {
   }
 
   ctx.resetTransform();
+}
+
+/**
+ * @param {SWGE_Entity[]} prev_entities
+ * @param {SWGE_Entity[]} next_entities
+ * @param {number} alpha a number between 0 and 1 that represents how far between prev_entities and next_entities to interpolate
+ * @returns {SWGE_Entity[]}
+ */
+export function swge_interpolate_entities(prev_entities, next_entities, alpha) {
+  const interpolated_entities = [];
+  const clamped_alpha = Math.max(0, Math.min(1, alpha));
+  for (let i = 0; i < next_entities.length; i++) {
+    const next_entity = next_entities[i];
+    const prev_entity = prev_entities.find((e) => e.id === next_entity.id);
+    if (!prev_entity) {
+      interpolated_entities.push(next_entity);
+      continue;
+    }
+    const interpolated_entity = {
+      ...next_entity,
+      x: prev_entity.x + (next_entity.x - prev_entity.x) * clamped_alpha,
+      y: prev_entity.y + (next_entity.y - prev_entity.y) * clamped_alpha,
+      z: prev_entity.z + (next_entity.z - prev_entity.z) * clamped_alpha,
+      rotation_radians:
+        prev_entity.rotation_radians + (next_entity.rotation_radians - prev_entity.rotation_radians) * clamped_alpha,
+    };
+    interpolated_entities.push(interpolated_entity);
+  }
+  return interpolated_entities;
+}
+
+//https://medium.com/@doomgoober/understanding-html-canvas-scaling-and-sizing-c04925d9a830
+export function get_adjusted_canvas_size(canvas) {
+  const dimensions = get_object_fit_size(true, canvas.clientWidth, canvas.clientHeight, canvas.width, canvas.height);
+
+  const dpr = window.devicePixelRatio || 1;
+  return [dimensions.width * dpr, dimensions.height * dpr];
+}
+
+export function get_adjusted_canvas_scale(canvas) {
+  const dpr = window.devicePixelRatio || 1;
+  const ratio = Math.min(canvas.clientWidth / canvas.width, canvas.clientHeight / canvas.height);
+
+  return ratio * dpr;
+}
+
+// adapted from: https://www.npmjs.com/package/intrinsic-scale
+export function get_object_fit_size(
+  contains /* true = contain, false = cover */,
+  containerWidth,
+  containerHeight,
+  width,
+  height
+) {
+  const doRatio = width / height;
+  const cRatio = containerWidth / containerHeight;
+  let targetWidth = 0;
+  let targetHeight = 0;
+  const test = contains ? doRatio > cRatio : doRatio < cRatio;
+
+  if (test) {
+    targetWidth = containerWidth;
+    targetHeight = targetWidth / doRatio;
+  } else {
+    targetHeight = containerHeight;
+    targetWidth = targetHeight * doRatio;
+  }
+
+  return {
+    width: targetWidth,
+    height: targetHeight,
+    x: (containerWidth - targetWidth) / 2,
+    y: (containerHeight - targetHeight) / 2,
+  };
 }

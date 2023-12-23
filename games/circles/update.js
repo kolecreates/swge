@@ -3,7 +3,8 @@
 // a player moves their circle by using the keyword
 // a lobby id is displayed on the screen.
 // any player can join any lobby by going to the url
-export default function update({ events, ticks_per_second, loop_id, state }) {
+// @TODO names above circle
+export default function update({ events, ticks_per_second, loop_id, is_client, local_player_id, state }) {
   const next_state = {
     ...(state || {
       space_width: 100,
@@ -12,10 +13,30 @@ export default function update({ events, ticks_per_second, loop_id, state }) {
     }),
   };
 
+  if (!next_state.camera && is_client) {
+    next_state.camera = { x: 0, y: 0, z: 1, fov_width: 100, fov_height: 100 };
+  }
+
   next_state.loop_id = loop_id;
 
   for (let event of events) {
-    if (event.type === "join") {
+    if (event.type === "server_update") {
+      const local_player_entity = next_state.entities.find((e) => e.id === local_player_id);
+      const server_player_entity_index = event.state.entities.findIndex((e) => e.id === local_player_id);
+      if (local_player_entity) {
+        event.state.entities[server_player_entity_index] = {
+          ...event.state.entities[server_player_entity_index],
+          velocity: local_player_entity.velocity,
+          x: local_player_entity.x,
+          y: local_player_entity.y,
+          z: local_player_entity.z,
+        };
+      }
+
+      next_state.entities = event.state.entities;
+      next_state.space_width = event.state.space_width;
+      next_state.space_height = event.state.space_height;
+    } else if (event.type === "join") {
       next_state.entities.push({
         id: event.player_id,
         x: Math.random() * next_state.space_width,
@@ -28,46 +49,37 @@ export default function update({ events, ticks_per_second, loop_id, state }) {
         rotation_origin_y: 0,
         rotation_radians: 0,
         velocity: [0, 0],
-        speed: 1,
+        speed: 10,
         color: event.is_host ? "red" : "blue",
       });
-    }
-    if (event.type === "leave") {
+    } else if (event.type === "leave") {
       next_state.entities = next_state.entities.filter((e) => e.id !== event.player_id);
       if (event.is_host) {
         next_state.entities[0].color = "red";
       }
-    }
-
-    if (event.type === "move") {
+    } else if (event.type === "move") {
       const entity = next_state.entities.find((e) => e.id === event.player_id);
       if (entity) {
         entity.velocity = [
-          Math.min(1, Math.max(-1, event.vector[0])) * entity.speed,
-          Math.min(1, Math.max(-1, event.vector[1])) * entity.speed,
+          event.x === undefined ? entity.velocity[0] : Math.sign(event.x),
+          event.y === undefined ? entity.velocity[1] : Math.sign(event.y),
         ];
       }
     }
   }
 
   for (let entity of next_state.entities) {
-    entity.x += entity.velocity[0] / ticks_per_second;
-    entity.y += entity.velocity[1] / ticks_per_second;
+    const length = Math.sqrt(entity.velocity[0] ** 2 + entity.velocity[1] ** 2);
+    const vx = length > 0 ? (entity.velocity[0] / length) * entity.speed : 0;
+    const vy = length > 0 ? (entity.velocity[1] / length) * entity.speed : 0;
 
-    if (entity.x < 0) {
-      entity.x = 0;
-    }
-    if (entity.x > next_state.space_width) {
-      entity.x = next_state.space_width;
-    }
+    entity.x += vx / ticks_per_second;
+    entity.y += vy / ticks_per_second;
 
-    if (entity.y < 0) {
-      entity.y = 0;
-    }
-
-    if (entity.y > next_state.space_height) {
-      entity.y = next_state.space_height;
-    }
+    // if (is_client && entity.id === local_player_id) {
+    //   next_state.camera.x = entity.x;
+    //   next_state.camera.y = entity.y;
+    // }
   }
 
   return next_state;
